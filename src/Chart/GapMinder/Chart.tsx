@@ -13,6 +13,8 @@ const Chart = ({ data, scales, chartConstants }: Props) => {
   const [index, setIndex] = useState<number>(0)
   const chartRef: MutableRefObject<SVGGElement | null> = useRef(null)
 
+  const { canvas: { width, height }, margins } = chartConstants
+
   useEffect(() => {
     const intervalFn = d3.interval(() => { // eslint-disable-line
       setIndex(index => {
@@ -33,7 +35,7 @@ const Chart = ({ data, scales, chartConstants }: Props) => {
     circles.selectAll('circle').data(data[index], (d: any) => d.country).join(
       enter => (
         enter.append('circle')
-          .attr('cy', chartConstants.height)
+          .attr('cy', height)
           .attr('opacity', 0)
           .attr('cx', d => scales.xScale(d.income))
           .attr('r', 0)
@@ -70,8 +72,8 @@ const Chart = ({ data, scales, chartConstants }: Props) => {
     <g ref={chartRef}>
       <text
         id="year"
-        x={chartConstants.width - chartConstants.margins.right - chartConstants.margins.left}
-        y={chartConstants.height - chartConstants.margins.top - chartConstants.margins.bottom}
+        x={width - margins.right - 5 * margins.left}
+        y={height - margins.top - margins.bottom}
         fill='white'
         stroke='black'
         fontSize={40}

@@ -4,6 +4,9 @@ import * as d3 from 'd3' // we need the global module in order for transitions t
 import rawData from '../../Data/data.json'
 import Chart from './Chart'
 
+import './Canvas.scss'
+import Legend from './Legend'
+
 export type CountryData = {
   population: number;
   income: number;
@@ -25,24 +28,36 @@ export type Scale = {
     colorScale: d3.ScaleOrdinal<string, any>;
   }
 
+type CanvasDimensions = {
+  width: number;
+  height: number;
+}
 export type ChartConstants = {
   margins: Record<string, number>;
+  canvas: CanvasDimensions;
+}
+
+// height and width should reflect the (dynamic) dimensions of the wrapper
+type Props = {
   width: number;
   height: number;
 }
 
-const Canvas = () => {
+const Canvas = (props: Props) => {
   const [data, setData] = useState<CountryData[][]>()
   const [scales, setScales] = useState<Scale>()
+  const [continents, setContinents] = useState<string[]>()
 
   /**
    * CHART POSITIONING CONSTANTS
    */
-  const margins = { top: 20, right: 30, bottom: 30, left: 40 }
+  const chartMargins = { top: 20, right: 30, bottom: 30, left: 40 }
   const chartConstants: ChartConstants = {
-    margins,
-    width: 1000 - margins.left - margins.right,
-    height: 600 - margins.top - margins.bottom
+    margins: chartMargins,
+    canvas: {
+      width: props.width - chartMargins.left - chartMargins.right,
+      height: props.height - chartMargins.top - chartMargins.bottom
+    }
   }
 
   useEffect(() => {
@@ -75,9 +90,9 @@ const Canvas = () => {
     const xScale = d3.scaleLog()
       .base(10)
       .domain([100, maxIncome])
-      .range([chartConstants.margins.left, chartConstants.width - chartConstants.margins.right])
+      .range([chartConstants.margins.left, chartConstants.canvas.width - chartConstants.margins.right])
 
-    const yScale = d3.scaleLinear().domain([0, maxLifeExp + 10]).range([chartConstants.height - chartConstants.margins.bottom, chartConstants.margins.top])
+    const yScale = d3.scaleLinear().domain([0, maxLifeExp + 10]).range([chartConstants.canvas.height - chartConstants.margins.bottom, chartConstants.margins.top])
 
     const rScale = d3.scalePow().domain([minPop, maxPop]).exponent(0.3).range([5, 50])
 
@@ -97,7 +112,7 @@ const Canvas = () => {
      */
     d3.select('#canvas').append('g')
       .attr('id', 'x-axis')
-      .attr('transform', `translate(0, ${chartConstants.height - chartConstants.margins.bottom})`)
+      .attr('transform', `translate(0, ${chartConstants.canvas.height - chartConstants.margins.bottom})`)
       .call(d3.axisBottom(xScale)
         .tickValues([400, 4000, 40000])
         .tickFormat(d3.format('$')))
@@ -108,21 +123,43 @@ const Canvas = () => {
       .call(d3.axisLeft(yScale))
 
     setData(flaggedData)
+    setContinents(continents)
   }, [])
 
+  const { canvas: { width, height }, margins } = chartConstants
   return (
-    <svg
-      viewBox={`0 0 ${chartConstants.width + chartConstants.margins.left + chartConstants.margins.right} ${chartConstants.height + chartConstants.margins.top + chartConstants.margins.bottom}`}
-    >
-      <g id='canvas' transform={`translate(${chartConstants.margins.left}, ${chartConstants.margins.top})`} />
-      {data?.length && scales
-        ? <Chart
-          scales={scales}
-          data={data}
-          chartConstants={chartConstants}
-        />
-        : null }
-    </svg>
+    <div
+      id="chart-area"
+      style={{ height: `${height + margins.top + margins.bottom}px`, width: `${width + margins.left + margins.right}px` }}>
+
+      <svg
+        viewBox={`0 0 ${width + margins.left + margins.right} ${height + margins.top + margins.bottom}`}
+      >
+        <g
+          id='canvas'
+          transform={`translate(${margins.left}, ${margins.top})`} />
+
+        {data?.length && scales && continents
+          ? <>
+            <Chart
+              scales={scales}
+              data={data}
+              chartConstants={chartConstants}
+            />
+            {/* foreignObject to wrap html namespace elements in an svg namespace */}
+            <foreignObject
+              id="legend"
+              transform={`translate(${width - 5 * margins.right} ${height - margins.top - 8 * margins.bottom})`}
+              height='1'
+              width='1'
+            >
+              <Legend labels={continents} scale={scales?.colorScale}/>
+            </foreignObject>
+          </>
+          : null }
+
+      </svg>
+    </div>
   )
 }
 
