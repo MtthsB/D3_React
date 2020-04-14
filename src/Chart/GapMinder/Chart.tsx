@@ -1,164 +1,85 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, MutableRefObject } from 'react'
 import * as d3 from 'd3'
 
-import rawData from '../../Data/data.json'
+import { Scale, ChartConstants, CountryData } from './Canvas'
 
-type CountryData = {
-  population: number;
-  income: number;
-  life_exp: number; // eslint-disable-line
-  continent: string;
-  country: string;
-  dirty?: boolean;
-  }
+type Props = {
+  data: CountryData[][];
+  scales: Scale;
+  chartConstants: ChartConstants;
+}
 
-  interface ChartData {
-  year: string;
-  countries: CountryData[];
-  }
-
-  type Scale = {
-    xScale: d3.ScaleLogarithmic<number, number>;
-    yScale: d3.ScaleLinear<number, number>;
-    rScale: d3.ScalePower<number, number>;
-    colorScale: d3.ScaleOrdinal<string, any>;
-  }
-
-/**
-   * CHART POSITIONING CONSTANTS
-   */
-const margin = { top: 20, right: 30, bottom: 30, left: 40 }
-const width = 1000 - margin.left - margin.right
-const height = 600 - margin.top - margin.bottom
-
-// This is basically where all the static info is generated (area, axes, titles, legend)
-// + where the data is parsed and cleaned
-// + where the timer is initiated
-
-const Chart = () => {
-  const d3Container: any = useRef()
-  const [data, setData] = useState<ChartData[]>()
+const Chart = ({ data, scales, chartConstants }: Props) => {
   const [index, setIndex] = useState<number>(0)
-  const [scales, setScales] = useState<Scale>()
+  const chartRef: MutableRefObject<SVGGElement | null> = useRef(null)
 
   useEffect(() => {
-    let interval: any
-
-    /**
-     * DATA CLEANING & PREPPING
-     */
-
-    const flaggedData: ChartData[] = [...rawData as ChartData[]]
-    let continents: string[] = [] as string[]
-    let maxPop = 0
-    let minPop = 0
-    let maxIncome = 0
-    let maxLifeExp = 0
-    flaggedData.map((datum, index) => {
-      return datum.countries.forEach((country, i) => {
-      // list the different continents for ordinal categorisation by colour while you're at it
-        continents = continents.includes(country.continent) ? continents : [...continents, country.continent]
-
-        if (country.life_exp && country.income && country.population) {
-          maxPop = country.population > maxPop ? country.population : maxPop
-          minPop = country.population < minPop ? country.population : minPop
-          maxIncome = country.income > maxIncome ? country.income : maxIncome
-          maxLifeExp = country.life_exp > maxLifeExp ? country.life_exp : maxLifeExp
-          flaggedData[index].countries[i].dirty = false
-        } else {
-          flaggedData[index].countries[i].dirty = true
-        }
-      })
-    })
-
-    /**
-     * CREATING THE SCALE CONVERTERS
-     */
-
-    const xScale = d3.scaleLog()
-      .base(10)
-      .domain([100, maxIncome])
-      .range([margin.left, width - margin.right])
-
-    const yScale = d3.scaleLinear().domain([0, maxLifeExp + 10]).range([height - margin.bottom, margin.top])
-
-    const rScale = d3.scalePow().domain([minPop, maxPop]).exponent(0.3).range([5, 50])
-
-    const colorScale = d3.scaleOrdinal()
-      .domain(continents)
-      .range(d3.schemeBrBG[continents.length])
-
-    setScales({
-      xScale,
-      yScale,
-      rScale,
-      colorScale
-    })
-
-    /**
-     * ADDING THE AXES
-     */
-    d3.select('#axes').append('g')
-      .attr('id', 'x-axis')
-      .attr('transform', `translate(0, ${height - margin.bottom})`)
-      .call(d3.axisBottom(xScale)
-        .tickValues([400, 4000, 40000])
-        .tickFormat(d3.format('$')))
-
-    d3.select('#axes').append('g')
-      .attr('id', 'y-axis')
-      .attr('transform', `translate(${margin.left}, 0)`)
-      .call(d3.axisLeft(yScale))
-
-    interval = d3.interval(() => { // eslint-disable-line
+    const intervalFn = d3.interval(() => { // eslint-disable-line
       setIndex(index => {
-        if (index < flaggedData.length - 1) {
+        if (index < data.length - 1) {
           return index + 1
         } else {
           return 0
         }
       })
-    }, 200)
+    }, 500)
 
-    setData(flaggedData)
-
-    return () => interval.stop()
+    return () => intervalFn.stop()
   }, [])
 
+  useEffect(() => {
+    const circles = d3.select(chartRef.current)
+
+    circles.selectAll('circle').data(data[index], (d: any) => d.country).join(
+      enter => (
+        enter.append('circle')
+          .attr('cy', chartConstants.height)
+          .attr('opacity', 0)
+          .attr('cx', d => scales.xScale(d.income))
+          .attr('r', 0)
+          .attr('fill', d => scales.colorScale(d.continent))
+          .call(enter => (
+            enter.transition().duration(500)
+              .attr('opacity', 0.6)
+              .attr('r', d => scales.rScale(d.population))
+              .attr('cy', d => scales.yScale(d.life_exp))
+          ))
+      ),
+      update => (
+        update
+          .call(update => (
+            update.transition().duration(500)
+              .attr('r', d => scales.rScale(d.population))
+              .attr('cy', d => scales.yScale(d.life_exp))
+              .attr('cx', d => scales.xScale(d.income))
+          ))
+      )
+      ,
+      exit => (
+        exit
+          .call(exit => (
+            exit.transition().duration(500)
+              .attr('r', 0)
+              .remove()
+          )
+          ))
+    )
+  }, [index, data])
+
   return (
-    <svg
-      viewBox={`0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`}
-    >
-      <g id='axes' transform={`translate(${margin.left}, ${margin.top})`} ref={d3Container}>
-        {data?.length
-          ? <>
-            <text
-              id="year"
-              x={width - margin.right - margin.left}
-              y={height - margin.top - margin.bottom}
-              fill='white'
-              stroke='black'
-              fontSize={40}
-              textAnchor='middle'
-            >
-              {data[index].year}
-            </text>
-            {scales && data[index].countries.map((country, index) => {
-              return (
-                <circle
-                  key={`${index}-${country.country}`}
-                  cy={!country.dirty ? scales.yScale(country.life_exp) : undefined}
-                  cx={!country.dirty ? scales.xScale(country.income) : undefined}
-                  r={!country.dirty ? scales.rScale(country.population) : undefined}
-                  opacity={0.6}
-                  fill={`${scales.colorScale(country.continent)}`}
-                />
-              )
-            })}
-          </>
-          : null }
-      </g>
-    </svg>
+    <g ref={chartRef}>
+      <text
+        id="year"
+        x={chartConstants.width - chartConstants.margins.right - chartConstants.margins.left}
+        y={chartConstants.height - chartConstants.margins.top - chartConstants.margins.bottom}
+        fill='white'
+        stroke='black'
+        fontSize={40}
+        textAnchor='middle'
+      >
+        {1800 + index}
+      </text>
+    </g>
   )
 }
 
